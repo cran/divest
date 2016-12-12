@@ -1,4 +1,4 @@
-eb5d1abc32b5bfac90d79bb621307ca1 *DESCRIPTION
+8af7beebbcfe9478d2101d7b7c8b13ac *DESCRIPTION
 a7ff760dfbb46003c8151c176ee75250 *LICENCE
 11ce12e324536b419ca5e6c0118622c5 *NAMESPACE
 1979447c063b76aa08c3d56156224af7 *R/read.R
@@ -31,4 +31,4 @@ be4366210761f7b564d176726642ddee *src/main.cpp
 6e35c4e080cb8c16c0ef91194c277140 *src/ujpeg/ujpeg.cpp
 f0dc615a3f0d05f8e595d2a5098eae73 *src/ujpeg/ujpeg.h
 236acb779598fd2162a31cab815bfa87 *tests/test-all.R
-60345539586516b245307eb10d40688c *tests/testthat/test-05-read.R
+3b0a3897934d6d31db19f501218af559 *tests/testthat/test-05-read.R
