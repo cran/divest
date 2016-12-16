@@ -1,4 +1,4 @@
-8af7beebbcfe9478d2101d7b7c8b13ac *DESCRIPTION
+a2030ddb4579eb5dea16b073583f44d6 *DESCRIPTION
 a7ff760dfbb46003c8151c176ee75250 *LICENCE
 11ce12e324536b419ca5e6c0118622c5 *NAMESPACE
 1979447c063b76aa08c3d56156224af7 *R/read.R
@@ -17,7 +17,7 @@ fd7d2ee4d476358d3729041fdc585c3b *src/dcm2niix/jpg_0XC3.cpp
 7bf5863f3ff964d06ca021a929bc80bd *src/dcm2niix/jpg_0XC3.h
 6374a630173933554563568809683760 *src/dcm2niix/nifti1_io_core.cpp
 7cbfc44c63893487cf14049384493ec6 *src/dcm2niix/nifti1_io_core.h
-3b72586c4b5357230a04ac0fb94299b4 *src/dcm2niix/nii_dicom.cpp
+63a95f83dc7da9712a27d165b026bfc3 *src/dcm2niix/nii_dicom.cpp
 14ba45283e7d6d6a4d6651435b1400f9 *src/dcm2niix/nii_dicom.h
 c60c4fac9c82e256da919fb7e4cf9821 *src/dcm2niix/nii_dicom_batch.cpp
 2be5fddf2f177e040a78c0e05ad1e518 *src/dcm2niix/nii_dicom_batch.h
