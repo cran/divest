@@ -12,9 +12,10 @@ class ImageList
 {
 private:
     Rcpp::List list;
+    Rcpp::List deferredAttributes;
     
 public:
-    operator SEXP()
+    operator SEXP ()
     {
         return list;
     }
@@ -23,7 +24,17 @@ public:
     {
         RNifti::NiftiImage wrapper(image);
         wrapper.setPersistence(true);
-        list.push_back(wrapper.toPointer(name));
+        Rcpp::RObject pointer = wrapper.toPointer(name);
+        
+        if (deferredAttributes.size() > 0)
+        {
+            std::vector<std::string> attributeNames = deferredAttributes.names();
+            for (int i = 0; i < deferredAttributes.size(); i++)
+                pointer.attr(attributeNames[i]) = deferredAttributes[i];
+            deferredAttributes = Rcpp::List();
+        }
+        
+        list.push_back(pointer);
     }
     
     template <typename ValueType>
@@ -31,6 +42,26 @@ public:
     {
         Rcpp::RObject element = list[list.length()-1];
         element.attr(name) = value;
+    }
+    
+    void addDateAttribute (const std::string &name, const char *value)
+    {
+        Rcpp::RObject element = list[list.length()-1];
+        element.attr(name) = Rcpp::Date(value, "%Y%m%d");
+    }
+    
+    template <typename ValueType>
+    void addDeferredAttribute (const std::string &name, const ValueType &value)
+    {
+        deferredAttributes[name] = value;
+    }
+    
+    template <typename ValueType>
+    void addDeferredAttribute (const std::string &name, const ValueType &value, const int nRows, const int nCols)
+    {
+        Rcpp::RObject wrappedValue = Rcpp::wrap(value);
+        wrappedValue.attr("dim") = Rcpp::Dimension(nRows, nCols);
+        deferredAttributes[name] = wrappedValue;
     }
 };
 
