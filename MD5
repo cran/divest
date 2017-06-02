@@ -1,7 +1,7 @@
-b4ad825ab5678a0484f6feec7f021845 *DESCRIPTION
+c2a1ba9ad0bd5736816c5cf5e7a7507a *DESCRIPTION
 a25f296170e6d3a817250fc95af87205 *LICENCE
 231c787b0718e9a16e1928d255120537 *NAMESPACE
-63c6de79eb2930af04aee63b48472bf4 *NEWS
+8ce56f2fe897f9308094caeb6035296e *NEWS
 0718064240890e1e6c21483adcc87944 *R/read.R
 58c323e917140f1e4186fe5c0e4bc2ff *R/zzz.R
 521d29a967ef20789a338cbcbe659ceb *README.md
@@ -21,9 +21,9 @@ a48d31687aba1ae363a40d4f9188a556 *src/dcm2niix/jpg_0XC3.cpp
 7bf5863f3ff964d06ca021a929bc80bd *src/dcm2niix/jpg_0XC3.h
 7854e13ec437956bb63af9978bb99593 *src/dcm2niix/nifti1_io_core.cpp
 7cbfc44c63893487cf14049384493ec6 *src/dcm2niix/nifti1_io_core.h
-82ffb4c66c1ed31a082cdd697bcddb2d *src/dcm2niix/nii_dicom.cpp
+2a1e12e80446a96a7e397bb031a282a0 *src/dcm2niix/nii_dicom.cpp
 694a68f52c393f53a8cdff5a76b23434 *src/dcm2niix/nii_dicom.h
-493cd173b2c2e60f366b16e31d67709a *src/dcm2niix/nii_dicom_batch.cpp
+5cda1a0fe5cd4582b536e907b68e46c1 *src/dcm2niix/nii_dicom_batch.cpp
 c7ffe5c040a363691338dd72b0fd377a *src/dcm2niix/nii_dicom_batch.h
 7699721609c510f66b3afceee91f6764 *src/dcm2niix/nii_foreign.cpp
 5c2eaa8a7ffaca56a89e11a29c38a969 *src/dcm2niix/nii_foreign.h
@@ -33,7 +33,7 @@ f3ad6afb9990310e06c274e1e91ecb3d *src/dcm2niix/nii_ortho.h
 bbe3ec44de5bea3d8419d2181c1eec38 *src/dcm2niix/nii_ostu_ml.h
 e6daf18441e5f41e1764bfd55e78cb4a *src/dcm2niix/print.h
 05afaf37b35dc1a3122655df94cd7ee9 *src/dcm2niix/tinydir.h
-07275979a0f6889f460d35ec8b0a38f2 *src/main.cpp
+8d6e6dbc98efb43f952afe2acd783917 *src/main.cpp
 03ce304a71ae0ad1c43663fb386cc233 *src/ujpeg/ujpeg.cpp
 f0dc615a3f0d05f8e595d2a5098eae73 *src/ujpeg/ujpeg.h
 236acb779598fd2162a31cab815bfa87 *tests/test-all.R
