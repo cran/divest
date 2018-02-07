@@ -4,7 +4,7 @@
     return (structure(table[ordering,], descriptions=attr(table,"descriptions")[ordering], paths=attr(table,"paths")[ordering], ordering=ordering, class=c("divest","data.frame")))
 }
 
-.readDirectory <- function (path, flipY, crop, forceStack, verbosity, labelFormat, scanOnly)
+.readPath <- function (path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, scanOnly)
 {
     if (verbosity < 0L)
     {
@@ -17,7 +17,7 @@
         })
     }
     
-    .Call(C_readDirectory, path, flipY, crop, forceStack, verbosity, labelFormat, scanOnly)
+    .Call(C_readDirectory, path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, scanOnly)
 }
 
 #' Read one or more DICOM directories
@@ -27,20 +27,32 @@
 #' potentially pertaining to more than one image series, read them and/or merge
 #' them into a list of \code{niftiImage} objects.
 #' 
+#' The \code{scanDicom} function parses directories full of DICOM files and
+#' returns information about the acquisition series they contain.
+#' \code{readDicom} reads these files and converts them to (internal) NIfTI
+#' images (whose pixel data can be extracted using \code{as.array}).
+#' \code{sortDicom} sorts the files into subdirectories by series, but does not
+#' convert them.
+#' 
 #' The \code{labelFormat} argument describes the string format used for image
-#' labels. Valid codes, each escaped with a percentage sign, include \code{a}
-#' for coil number, \code{c} for image comments, \code{d} for series
-#' description, \code{e} for echo number, \code{f} for the source directory,
-#' \code{i} for patient ID, \code{l} for the procedure step description,
-#' \code{m} for manufacturer, \code{n} for patient name, \code{p} for protocol
-#' name, \code{q} for scanning sequence, \code{s} for series number, \code{t}
-#' for the date and time, \code{u} for acquisition number and \code{z} for
-#' sequence name.
+#' labels and sorted subdirectories. Valid codes, each escaped with a
+#' percentage sign, include \code{a} for coil number, \code{c} for image
+#' comments, \code{d} for series description, \code{e} for echo number,
+#' \code{f} for the source directory, \code{i} for patient ID, \code{l} for the
+#' procedure step description, \code{m} for manufacturer, \code{n} for patient
+#' name, \code{p} for protocol name, \code{q} for scanning sequence, \code{s}
+#' for series number, \code{t} for the date and time, \code{u} for acquisition
+#' number and \code{z} for sequence name.
 #' 
 #' @param path A character vector of paths to scan for DICOM files. Each will
 #'   examined in turn. The default is the current working directory.
-#'   Alternatively, a data frame like the one returned by \code{scanDicom},
+#'   \code{readDicom} (only) will accept paths to individual DICOM files,
+#'   rather than directories. Alternatively, for \code{readDicom} and
+#'   \code{sortDicom}, a data frame like the one returned by \code{scanDicom},
 #'   from which file paths will be read.
+#' @param subset If \code{path} is a data frame, an expression which will be
+#'   evaluated in the context of the data frame to determine which series to
+#'   convert. Should evaluate to a logical vector.
 #' @param flipY If \code{TRUE}, the default, then images will be flipped in the
 #'   Y-axis. This is usually desirable, given the difference between
 #'   orientation conventions in the DICOM and NIfTI-1 formats.
@@ -55,25 +67,30 @@
 #'   output from \code{dcm2niix} except warnings and errors.
 #' @param labelFormat A \code{\link{sprintf}}-style string specifying the
 #'   format to use for the final image labels. See Details.
-#' @param subset If \code{path} is a data frame, an expression which will be
-#'   evaluated in the context of the data frame to determine which series to
-#'   convert.
 #' @param interactive If \code{TRUE}, the default in interactive sessions, the
 #'   requested paths will first be scanned and a list of DICOM series will be
 #'   presented. You may then choose which series to convert.
+#' @param nested For \code{sortDicom}, should the sorted files be created
+#'   within the source directory (\code{TRUE}, the default), or in the current
+#'   working directory (\code{FALSE})?
+#' @param keepUnsorted For \code{sortDicom}, should the unsorted files be left
+#'   in place, or removed after they are copied into their new locations? The
+#'   default, \code{FALSE}, corresponds to a move rather than a copy. If
+#'   creating new files fails then the old ones will not be deleted.
 #' @return The \code{readDicom} function returns a list of \code{niftiImage}
 #'   objects, which can be easily converted to standard R arrays or written to
 #'   NIfTI-1 format using functions from the \code{RNifti} package. The
 #'   \code{scanDicom} function returns a data frame containing information
-#'   about each DICOM series found.
+#'   about each DICOM series found. \code{sortDicom} is called for its side-
+#'   effect, and so returns \code{NULL}.
 #' 
 #' @examples
-#' path <- system.file("extdata", "testdata", package="divest")
+#' path <- system.file("extdata", "raw", package="divest")
 #' scanDicom(path)
 #' readDicom(path, interactive=FALSE)
 #' @author Jon Clayden <code@@clayden.org>
 #' @export
-readDicom <- function (path = ".", flipY = TRUE, crop = FALSE, forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", subset = NULL, interactive = base::interactive())
+readDicom <- function (path = ".", subset = NULL, flipY = TRUE, crop = FALSE, forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", interactive = base::interactive())
 {
     readFromTempDirectory <- function (tempDirectory, files)
     {
@@ -99,10 +116,10 @@ readDicom <- function (path = ".", flipY = TRUE, crop = FALSE, forceStack = FALS
         if (!all(success))
             stop("Cannot symlink or copy files into temporary directory")
         
-        .readDirectory(tempDirectory, flipY, crop, forceStack, verbosity, labelFormat, FALSE)
+        .readPath(tempDirectory, flipY, crop, forceStack, verbosity, labelFormat, FALSE, FALSE)
     }
     
-    pathsAreFiles <- FALSE
+    usingTempDirectory <- FALSE
     if (is.data.frame(path))
     {
         subset <- eval(substitute(subset), path)
@@ -110,20 +127,27 @@ readDicom <- function (path = ".", flipY = TRUE, crop = FALSE, forceStack = FALS
             path <- attr(path,"paths")[subset]
         else
             path <- attr(path,"paths")
-        pathsAreFiles <- TRUE
+        usingTempDirectory <- TRUE
     }
     
     results <- lapply(path, function(p) {
-        if (pathsAreFiles)
+        if (usingTempDirectory)
         {
             absolute <- grepl(paste0("^([A-Za-z]:)?",.Platform$file.sep), p)
             p[!absolute] <- file.path("..", p[!absolute])
             readFromTempDirectory(".divest", p)
         }
+        else if (!file.exists(p))
+        {
+            warning(paste0("Path \"", p, "\" does not exist"))
+            return (NULL)
+        }
+        else if (!file.info(p)$isdir)
+            .readPath(path.expand(p), flipY, crop, forceStack, verbosity, labelFormat, TRUE, FALSE)
         else if (interactive)
         {
             p <- path.expand(p)
-            info <- .sortInfoTable(.readDirectory(p, flipY, crop, forceStack, min(0L,verbosity), labelFormat, TRUE))
+            info <- .sortInfoTable(.readPath(p, flipY, crop, forceStack, min(0L,verbosity), labelFormat, FALSE, TRUE))
             
             nSeries <- nrow(info)
             if (nSeries < 1)
@@ -136,7 +160,7 @@ readDicom <- function (path = ".", flipY = TRUE, crop = FALSE, forceStack = FALS
             selection <- readline("\nSelected series: ")
             if (selection == "")
             {
-                allResults <- .readDirectory(p, flipY, crop, forceStack, verbosity, labelFormat, FALSE)
+                allResults <- .readPath(p, flipY, crop, forceStack, verbosity, labelFormat, FALSE, FALSE)
                 return (allResults[attr(info,"ordering")])
             }
             else if (selection == "0")
@@ -153,7 +177,7 @@ readDicom <- function (path = ".", flipY = TRUE, crop = FALSE, forceStack = FALS
             }
         }
         else
-            .readDirectory(path.expand(p), flipY, crop, forceStack, verbosity, labelFormat, FALSE)
+            .readPath(path.expand(p), flipY, crop, forceStack, verbosity, labelFormat, FALSE, FALSE)
     })
     
     return (do.call(c, results))
@@ -161,8 +185,58 @@ readDicom <- function (path = ".", flipY = TRUE, crop = FALSE, forceStack = FALS
 
 #' @rdname readDicom
 #' @export
-scanDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L)
+sortDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", nested = TRUE, keepUnsorted = FALSE)
 {
-    results <- lapply(path, function(p) .readDirectory(path.expand(p), TRUE, FALSE, forceStack, verbosity, "", TRUE))
-    .sortInfoTable(do.call(rbind, results))
+    if (is.data.frame(path))
+        info <- path
+    else
+        info <- scanDicom(path, forceStack, verbosity, labelFormat)
+    
+    for (i in seq_len(nrow(info)))
+    {
+        directory <- info$label[i]
+        if (nested)
+            directory <- file.path(info$rootPath[i], directory)
+        if (!file.exists(directory))
+            dir.create(directory)
+        
+        from <- attr(info, "paths")[[i]]
+        to <- file.path(directory, basename(from))
+        repeat
+        {
+            clashes <- (duplicated(to) | (from != to & file.exists(to)))
+            if (!any(clashes))
+                break
+            
+            # Add random six-hex-digit suffixes to resolve clashes
+            suffixes <- matrix(sample(c(0:9,letters[1:6]), 6*sum(clashes), replace=TRUE), ncol=6L)
+            to[clashes] <- paste0(to[clashes], "_", apply(suffixes,1,paste,collapse=""))
+        }
+        
+        inPlace <- (from == to)
+        if (verbosity > 0)
+            cat(paste0(paste(from[!inPlace], "->", to[!inPlace], collapse="\n"), "\n"))
+        
+        success <- file.copy(from[!inPlace], to[!inPlace])
+        if (!all(success))
+            warning("Not all files copied successfully into path \"", directory, "\"")
+        else if (!keepUnsorted)
+            unlink(from[!inPlace])
+    }
+    
+    invisible(NULL)
+}
+
+#' @rdname readDicom
+#' @export
+scanDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s")
+{
+    results <- lapply(path, function(p) {
+        if (file.info(p)$isdir)
+            .readPath(path.expand(p), TRUE, FALSE, forceStack, verbosity, labelFormat, FALSE, TRUE)
+        else
+            warning(paste0("Path \"", p, "\" does not point to a directory"))
+    })
+    
+    .sortInfoTable(Reduce(function(x,y) structure(rbind(x,y), descriptions=c(attr(x,"descriptions"),attr(y,"descriptions")), paths=c(attr(x,"paths"),attr(y,"paths"))), results))
 }

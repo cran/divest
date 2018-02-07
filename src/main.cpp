@@ -9,32 +9,28 @@
 
 using namespace Rcpp;
 
-RcppExport SEXP readDirectory (SEXP path_, SEXP flipY_, SEXP crop_, SEXP forceStack_, SEXP verbosity_, SEXP labelFormat_, SEXP scanOnly_)
+RcppExport SEXP readDirectory (SEXP path_, SEXP flipY_, SEXP crop_, SEXP forceStack_, SEXP verbosity_, SEXP labelFormat_, SEXP singleFile_, SEXP scanOnly_)
 {
 BEGIN_RCPP
     const std::string path = as<std::string>(path_);
     const std::string labelFormat = as<std::string>(labelFormat_);
     
     TDCMopts options;
+    setDefaultOpts(&options, NULL);
     options.isGz = false;
+    options.gzLevel = 0;
     options.isFlipY = as<bool>(flipY_);
     options.isCreateBIDS = false;
-    options.isAnonymizeBIDS = false;
     options.isCreateText = false;
-    options.isTiltCorrect = true;
-    options.isRGBplanar = false;
-    options.isOnlySingleFile = false;
+    options.isSortDTIbyBVal = false;
     options.isForceStackSameSeries = as<bool>(forceStack_);
-    options.isIgnoreDerivedAnd2D = false;
-    options.isPhilipsFloatNotDisplayScaling = true;
     options.isCrop = as<bool>(crop_);
+    options.isOnlySingleFile = as<bool>(singleFile_);
     options.isScanOnly = as<bool>(scanOnly_);
     options.isVerbose = as<int>(verbosity_);
     options.compressFlag = kCompressYes;
     strcpy(options.indir, path.c_str());
-    strcpy(options.outdir, "");
     strcpy(options.filename, labelFormat.c_str());
-    strcpy(options.pigzname, "");
     
     ImageList images;
     options.imageList = (void *) &images;
@@ -48,7 +44,7 @@ BEGIN_RCPP
             // Construct a data frame containing information about each series
             // A vector of descriptive strings is also built, and attached as an attribute
             const int n = options.series.size();
-            CharacterVector seriesDescription(n,NA_STRING), patientName(n,NA_STRING), descriptions(n);
+            CharacterVector label(n,NA_STRING), seriesDescription(n,NA_STRING), patientName(n,NA_STRING), descriptions(n);
             DateVector studyDate(n);
             NumericVector echoTime(n,NA_REAL), repetitionTime(n,NA_REAL);
             IntegerVector files(n,NA_INTEGER), seriesNumber(n,NA_INTEGER), echoNumber(n,NA_INTEGER);
@@ -100,13 +96,27 @@ BEGIN_RCPP
                 if (data.CSA.numDti > 0)
                     diffusion[i] = true;
                 
+                // The name is stored with leading path components, which we remove here
+                if (options.series[i].name.length() > 0)
+                {
+#if defined(_WIN32) || defined(_WIN64)
+                    size_t pathSeparator = options.series[i].name.find_last_of("\\/");
+#else
+                    size_t pathSeparator = options.series[i].name.find_last_of('/');
+#endif
+                    if (pathSeparator == std::string::npos)
+                        label[i] = options.series[i].name;
+                    else
+                        label[i] = options.series[i].name.substr(pathSeparator+1);
+                }
+                
                 phase[i] = data.isHasPhase;
                 descriptions[i] = description.str();
                 files[i] = options.series[i].files.size();
                 paths[i] = wrap(options.series[i].files);
             }
             
-            DataFrame info = DataFrame::create(Named("rootPath")=path, Named("files")=files, Named("seriesNumber")=seriesNumber, Named("seriesDescription")=seriesDescription, Named("patientName")=patientName, Named("studyDate")=studyDate, Named("echoTime")=echoTime, Named("repetitionTime")=repetitionTime, Named("echoNumber")=echoNumber, Named("phase")=phase, Named("diffusion")=diffusion, Named("stringsAsFactors")=false);
+            DataFrame info = DataFrame::create(Named("label")=label, Named("rootPath")=path, Named("files")=files, Named("seriesNumber")=seriesNumber, Named("seriesDescription")=seriesDescription, Named("patientName")=patientName, Named("studyDate")=studyDate, Named("echoTime")=echoTime, Named("repetitionTime")=repetitionTime, Named("echoNumber")=echoNumber, Named("phase")=phase, Named("diffusion")=diffusion, Named("stringsAsFactors")=false);
             info.attr("descriptions") = descriptions;
             info.attr("paths") = paths;
             info.attr("class") = CharacterVector::create("divest","data.frame");
@@ -121,7 +131,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef callMethods[] = {
-  { "readDirectory", (DL_FUNC) &readDirectory, 7 },
+  { "readDirectory", (DL_FUNC) &readDirectory, 8 },
   { NULL, NULL, 0 }
 };
 
