@@ -12,6 +12,15 @@ test_that("DICOM-reading code works", {
     expect_equal(dim(d[[i]]), c(2,224,256))
     expect_equal(attr(d[[i]],"flipAngle"), 15)
     
+    # Check all attributes
+    # NB. String sort order is locale-dependent, so use stored names directly for indexing
+    attributes <- attributes(d[[i]])
+    attrNames <- setdiff(names(attributes), ".nifti_image_ptr")
+    storedAttrNames <- readRDS("attrib_names.rds")
+    # expect_known_value(attrNames, "attrib_names.rds", update=FALSE)
+    expect_setequal(attrNames, storedAttrNames)
+    expect_known_value(attributes[storedAttrNames], "attributes.rds", update=FALSE)
+    
     origin <- RNifti::worldToVoxel(c(0,0,0), d[[i]])
     expect_equal(round(origin), c(-16,95,135))
     
@@ -30,6 +39,10 @@ test_that("DICOM-reading code works", {
     expect_output(d <- readDicom(file.path(path,"01.dcm"),interactive=FALSE), "Convert 1 DICOM")
     expect_equal(dim(d[[1]]), c(224,256,1))
     expect_warning(readDicom(file.path(path,"nonsense"),interactive=FALSE), "does not exist")
+    
+    # Depth argument
+    expect_output(d <- readDicom(file.path(path,".."),depth=0L,interactive=FALSE), "No valid DICOM files")
+    expect_length(d, 0L)
     
     skip_on_cran()
     
@@ -63,15 +76,23 @@ test_that("we can read JPEG-encoded data sets", {
 })
 
 test_that("DICOM file sorting works", {
-    path <- system.file("extdata", "raw", package="divest")
-    temp <- tempdir()
-    file.copy(path, temp, recursive=TRUE)
-    path <- file.path(temp, "raw")
+    origPath <- system.file("extdata", "raw", package="divest")
+    tempPath <- tempdir()
+    file.copy(origPath, tempPath, recursive=TRUE)
+    tempPath <- file.path(tempPath, "raw")
     
-    expect_output(sortDicom(path), "Found 4 DICOM")
-    expect_equal(length(list.files(path)), 2L)
-    expect_true(all(c("T0_N_S8","T0_N_S9") %in% list.files(path)))
-    expect_output(readDicom(file.path(path,"T0_N_S8"),interactive=FALSE), "Found 2 DICOM")
+    expect_output(sortDicom(tempPath), "Renamed 4 DICOM")
+    expect_equal(length(list.files(tempPath)), 2L)
+    expect_true(all(c("T0_N_S8","T0_N_S9") %in% list.files(tempPath)))
+    expect_output(readDicom(file.path(tempPath,"T0_N_S8"),interactive=FALSE), "Found 2 DICOM")
     
-    unlink(path, recursive=TRUE)
+    unlink(tempPath, recursive=TRUE)
+    
+    dir.create(tempPath)
+    setwd(tempPath)
+    
+    expect_output(sortDicom(origPath, labelFormat="T%t/S%s/%4r.ima", nested=FALSE, keepUnsorted=TRUE), "Renamed 4 DICOM")
+    expect_true(all(c("S8","S9") %in% list.files(file.path(tempPath,"T0"))))
+    
+    unlink(tempPath, recursive=TRUE)
 })
