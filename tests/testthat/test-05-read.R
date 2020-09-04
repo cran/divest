@@ -4,7 +4,7 @@ test_that("DICOM-reading code works", {
     # Read all
     path <- system.file("extdata", "raw", package="divest")
     expect_output(d <- readDicom(path,interactive=FALSE), "Found 4 DICOM")
-    expect_output(readDicom(path,interactive=FALSE,verbosity=-1), "Warning")
+    expect_output(readDicom(path,interactive=FALSE,verbosity=-1), "WARNING")
     
     # Check results
     expect_identical(length(d), 2L)
@@ -15,7 +15,7 @@ test_that("DICOM-reading code works", {
     # Check all attributes
     # NB. String sort order is locale-dependent, so use stored names directly for indexing
     attributes <- attributes(d[[i]])
-    attrNames <- setdiff(names(attributes), ".nifti_image_ptr")
+    attrNames <- grep("^[^\\.]", names(attributes), perl=TRUE, value=TRUE)
     storedAttrNames <- readRDS("attrib_names.rds")
     # expect_known_value(attrNames, "attrib_names.rds", update=FALSE)
     expect_setequal(attrNames, storedAttrNames)
