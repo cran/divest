@@ -1,10 +1,10 @@
-9f77e82b0b003f04078a3f320860131f *DESCRIPTION
+c648ec5d30fec3e194c083980f529327 *DESCRIPTION
 a85f1f2a84e682ed84a49515b6c18ba2 *LICENCE
 53b38624eed3750de3da719ce6a09035 *NAMESPACE
-70b3f2c7fbfb8871ef56093b085ecbc0 *NEWS
+f4b52667a8b95ab465c60a0fd35ec084 *NEWS
 4ae1eefeba9a33b24ab41f7dad515d6a *R/read.R
 58c323e917140f1e4186fe5c0e4bc2ff *R/zzz.R
-0a0968ebddb6097fe6c7da5ff18c8190 *README.md
+370b06727ef782a163cdd608052648eb *README.md
 8cf39bb779f93819723d18d59338bf6d *cleanup
 5e902dfb4a26760a65ba11f97fd36183 *configure
 15572da55f49b4312d1c8c6b1e355ece *configure.ac
@@ -27,7 +27,7 @@ c8b6a946146695b1e61deac9dbb8c1db *src/dcm2niix/nifti1_io_core.cpp
 e422d0e8a3d9aad725eec9eaba1069d4 *src/dcm2niix/nifti1_io_core.h
 77e09dd26abd81ea9817b6df1b9190b3 *src/dcm2niix/nii_dicom.cpp
 3fb2cdf4e1cff573b5f7577dc55249a0 *src/dcm2niix/nii_dicom.h
-7730ad073b366015c32ac9dcbfe3b82f *src/dcm2niix/nii_dicom_batch.cpp
+0f6874745ae37e1f39bb6fd4034bc600 *src/dcm2niix/nii_dicom_batch.cpp
 50c33a42b7b6b78320c41c45fed6cdeb *src/dcm2niix/nii_dicom_batch.h
 0ece1be536030f6fc862cbd5bace7967 *src/dcm2niix/nii_foreign.cpp
 5c2eaa8a7ffaca56a89e11a29c38a969 *src/dcm2niix/nii_foreign.h

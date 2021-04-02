@@ -816,12 +816,12 @@ int  geProtocolBlock(const char * filename,  int geOffset, int geLength, int isV
 	bool isFCOMMENT = ((flags & 0x10) == 0x10);
 	uint32_t hdrSz = 10;
 	if (isFNAME) {//skip null-terminated string FNAME
-		for (hdrSz = hdrSz; hdrSz < cmpSz; hdrSz++)
+		for (; hdrSz < cmpSz; hdrSz++)
 			if (pCmp[hdrSz] == 0) break;
 		hdrSz++;
 	}
 	if (isFCOMMENT) {//skip null-terminated string COMMENT
-		for (hdrSz = hdrSz; hdrSz < cmpSz; hdrSz++)
+		for (; hdrSz < cmpSz; hdrSz++)
 			if (pCmp[hdrSz] == 0) break;
 		hdrSz++;
 	}
@@ -3424,7 +3424,7 @@ void removeSclSlopeInter(struct nifti_1_header* hdr, unsigned char* img) {
 	//NRRD does not have scl_slope scl_inter. Adjust data if possible
 	// https://discourse.slicer.org/t/preserve-image-rescale-and-slope-when-saving-in-nrrd-file/13357
 	if  (isSameFloat(hdr->scl_inter,0.0) && isSameFloat(hdr->scl_slope,1.0)) return;
-	if ((!isSameFloat(fmod(hdr->scl_inter, 1.0),0.0)) || (!isSameFloat(fmod(hdr->scl_slope, 1.0),0.0))) return;	
+	if ((!isSameFloat(fmod(hdr->scl_inter, 1.0f),0.0)) || (!isSameFloat(fmod(hdr->scl_slope, 1.0f),0.0))) return;
 	int nVox = 1;
 	for (int i = 1; i < 8; i++)
 		if (hdr->dim[i] > 1) nVox = nVox * hdr->dim[i];
@@ -4734,7 +4734,7 @@ void sliceTimingGE_Testx0021x105E(struct TDICOMdata * d, struct TDCMopts opts, s
 	float mxErr = 0.0; 
 	for (int v = 0; v < hdr->dim[3]; v++) {
 		sliceTiming[v] = (sliceTiming[v] - mn) * 1000.0; //subtract offset, convert sec -> ms
-		mxErr = max(mxErr, fabs(sliceTiming[v] - d->CSA.sliceTiming[v]));
+		mxErr = max(mxErr, float(fabs(sliceTiming[v] - d->CSA.sliceTiming[v])));
 	}
 	printMessage("Slice Timing Error between calculated and RTIA timer(0021,105E): %gms\n", mxErr);
 	if ((mxErr < 1.0) && (opts.isVerbose < 1)) return;
