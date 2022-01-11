@@ -1,6 +1,6 @@
 Package: divest
-Version: 0.10.1
-Date: 2021-04-01
+Version: 0.10.2
+Date: 2022-01-06
 Title: Get Images Out of DICOM Format Quickly
 Authors@R: c(person("Jon", "Clayden", email="code@clayden.org", role=c("aut","cre"), comment=c(ORCID="0000-0002-6608-0619")),
              person("Chris", "Rorden", role="aut"),
@@ -19,11 +19,11 @@ BugReports: https://github.com/jonclayden/divest/issues
 Encoding: UTF-8
 RoxygenNote: 6.1.1
 NeedsCompilation: yes
-Packaged: 2021-04-02 11:25:30 UTC; jon
+Packaged: 2022-01-11 16:47:39 UTC; jon
 Author: Jon Clayden [aut, cre] (<https://orcid.org/0000-0002-6608-0619>),
   Chris Rorden [aut],
   Martin J Fiedler [cph],
   Cong Xu [cph],
   Pascal Gloor [cph]
 Repository: CRAN
-Date/Publication: 2021-04-02 15:00:10 UTC
+Date/Publication: 2022-01-11 17:52:41 UTC
