@@ -1,10 +1,69 @@
-.sortInfoTable <- function (table)
+tempDirectory <- function ()
 {
-    ordering <- with(table, order(patientName,studyDate,seriesNumber,echoNumber,phase))
-    return (structure(table[ordering,], descriptions=attr(table,"descriptions")[ordering], paths=attr(table,"paths")[ordering], ordering=ordering, class=c("divest","data.frame")))
+    # Don't overwrite an existing temporary directory
+    originalTempDirectory <- tempDirectory <- file.path(tempdir(), paste("divest",Sys.getpid(),sep="_"))
+    suffix <- 1
+    while (file.exists(tempDirectory))
+    {
+        tempDirectory <- paste(originalTempDirectory, as.character(suffix), sep="_")
+        suffix <- suffix + 1
+    }
+    
+    dir.create(tempDirectory, recursive=TRUE)
+    return (tempDirectory)
 }
 
-.readPath <- function (path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, depth, task = c("read","scan","sort"), outputDir = NULL)
+resolvePaths <- function (path, subset = NULL, dirsOnly = FALSE)
+{
+    # Data frame case (caller should handle subsets with character path)
+    if (is.data.frame(path))
+    {
+        if (!is.null(subset))
+            paths <- unlist(attr(path,"paths")[subset])
+        else
+            paths <- unlist(attr(path,"paths"))
+        
+        tempDirectory <- tempDirectory()
+        success <- file.symlink(paths, tempDirectory)
+        if (!all(success))
+        {
+            unlink(tempDirectory, recursive=TRUE)
+            dir.create(tempDirectory, recursive=TRUE)
+            success <- file.copy(paths, tempDirectory)
+        }
+        
+        if (all(success))
+            return (structure(tempDirectory, temporary=TRUE))
+        else
+            stop("Cannot symlink or copy files into temporary directory")
+    }
+    
+    # Path should now only be a character vector
+    for (i in seq_along(path))
+    {
+        if (!file.exists(path[i]))
+        {
+            warning(paste0("Path \"", path[i], "\" does not exist"))
+            path <- path[-i]
+        }
+        else if (dirsOnly && !file.info(path[i])$isdir)
+        {
+            warning(paste0("Path \"", path[i], "\" does not point to a directory"))
+            path <- path[-i]
+        }
+        else
+            path[i] <- path.expand(path[i])
+    }
+    return (path)
+}
+
+sortInfoTable <- function (table)
+{
+    ordering <- with(table, order(patientName,studyDate,seriesNumber,echoNumber,phase))
+    return (structure(table[ordering,], descriptions=attr(table,"descriptions")[ordering], paths=attr(table,"paths")[ordering], ordering=ordering, class=c("divestListing","data.frame")))
+}
+
+readPath <- function (path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, depth, task = c("read","convert","scan","sort"), outputDir = NULL)
 {
     task <- match.arg(task)
     if (verbosity < 0L)
@@ -18,11 +77,36 @@
         })
     }
     
-    .Call(C_readDirectory, path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, depth, task, outputDir)
+    if (is.null(outputDir))
+        outputDir <- tempDirectory()
+    results <- .Call(C_readDirectory, path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, depth, task, outputDir)
+    
+    if (task == "read")
+    {
+        convertAttributes <- !isTRUE(getOption("divest.bidsAttributes"))
+        addAttributes <- function (im)
+        {
+            attribs <- attributes(im)
+            if (!is.null(attribs$.bidsJson))
+            {
+                attribs <- c(attribs, fromBidsJson(attribs$.bidsJson, rename=convertAttributes))
+                attribs$.bidsJson <- NULL
+            }
+            else
+            {
+                jsonPath <- file.path(outputDir, paste(as.character(im),"json",sep="."))
+                if (file.exists(jsonPath))
+                    attribs <- c(attribs, fromBidsJson(jsonPath, rename=convertAttributes))
+            }
+            
+            attributes(im) <- attribs
+            return (im)
+        }
+        results <- lapply(results, addAttributes)
+    }
+    
+    return (results)
 }
-
-# Wrapper function to allow mocking in tests
-.readline <- function (...) base::readline(...)
 
 #' Read one or more DICOM directories
 #' 
@@ -35,7 +119,9 @@
 #' returns information about the acquisition series they contain.
 #' \code{readDicom} reads these files and converts them to (internal) NIfTI
 #' images (whose pixel data can be extracted using \code{as.array}).
-#' \code{sortDicom} renames the files, but does not convert them.
+#' \code{convertDicom} performs the same conversion but writes to NIfTI files
+#' by default, instead of retaining the images in memory. \code{sortDicom}
+#' renames the files, but does not convert them.
 #' 
 #' The \code{labelFormat} argument describes the string format used for image
 #' labels and sorted files. Valid codes, each escaped with a percentage sign,
@@ -85,16 +171,20 @@
 #' @param interactive If \code{TRUE}, the default in interactive sessions, the
 #'   requested paths will first be scanned and a list of DICOM series will be
 #'   presented. You may then choose which series to convert.
+#' @param output The directory to write converted or copied NIfTI files to, or
+#'   \code{NULL}. In the latter case, which isn't valid for \code{sortDicom},
+#'   images are converted in memory and returned as R objects.
 #' @param nested For \code{sortDicom}, should the sorted files be created
-#'   within the source directory (\code{TRUE}, the default), or in the current
-#'   working directory (\code{FALSE})?
+#'   within the source directory (\code{TRUE}), or in the current working
+#'   directory (\code{FALSE})? Now soft-deprecated in favour of \code{output},
+#'   which is more flexible.
 #' @param keepUnsorted For \code{sortDicom}, should the unsorted files be left
 #'   in place, or removed after they are copied into their new locations? The
 #'   default, \code{FALSE}, corresponds to a move rather than a copy. If
 #'   creating new files fails then the old ones will not be deleted.
-#' @return The \code{readDicom} function returns a list of \code{niftiImage}
-#'   objects, which can be easily converted to standard R arrays or written to
-#'   NIfTI-1 format using functions from the \code{RNifti} package. The
+#' @return \code{readDicom} and \code{convertDicom} return a list of
+#'   \code{niftiImage} objects if \code{output} is \code{NULL}; otherwise a
+#'   vector of paths to NIfTI-1 files created in the target directory. The
 #'   \code{scanDicom} function returns a data frame containing information
 #'   about each DICOM series found. \code{sortDicom} is mostly called for its
 #'   side-effect, but also (invisibly) returns a list detailing source and
@@ -105,119 +195,62 @@
 #' scanDicom(path)
 #' readDicom(path, interactive=FALSE)
 #' @author Jon Clayden <code@@clayden.org>
-#' @export
-readDicom <- function (path = ".", subset = NULL, flipY = TRUE, crop = FALSE, forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", depth = 5L, interactive = base::interactive())
+#' @export readDicom
+readDicom <- function (path = ".", subset = NULL, flipY = TRUE, crop = FALSE, forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", depth = 5L, interactive = base::interactive(), output = NULL)
 {
-    readFromTempDirectory <- function (tempDirectory, files)
-    {
-        # Don't overwrite an existing path
-        originalTempDirectory <- tempDirectory
-        i <- 1
-        while (file.exists(tempDirectory))
-        {
-            tempDirectory <- paste(originalTempDirectory, as.character(i), sep="_")
-            i <- i + 1
-        }
-        
-        dir.create(tempDirectory, recursive=TRUE)
-        on.exit(unlink(tempDirectory, recursive=TRUE))
-        
-        success <- file.symlink(files, tempDirectory)
-        if (!all(success))
-        {
-            unlink(tempDirectory, recursive=TRUE)
-            dir.create(tempDirectory, recursive=TRUE)
-            success <- file.copy(files, tempDirectory)
-        }
-        if (!all(success))
-            stop("Cannot symlink or copy files into temporary directory")
-        
-        .readPath(tempDirectory, flipY, crop, forceStack, verbosity, labelFormat, FALSE, depth, "read")
-    }
-    
-    usingTempDirectory <- FALSE
+    if (!is.data.frame(path) && !missing(subset))
+        path <- scanDicom(path, forceStack, verbosity, labelFormat)
     if (is.data.frame(path))
-    {
         subset <- eval(substitute(subset), path)
-        if (!is.null(subset))
-            path <- attr(path,"paths")[as.logical(subset)]
-        else
-            path <- attr(path,"paths")
-        usingTempDirectory <- TRUE
-    }
-    else if (!missing(subset))
-    {
-        info <- scanDicom(path, forceStack, verbosity, labelFormat)
-        subset <- eval(substitute(subset), info)
-        if (!is.null(subset))
-        {
-            path <- attr(info,"paths")[as.logical(subset)]
-            usingTempDirectory <- TRUE
-        }
-    }
     
-    results <- lapply(path, function(p) {
-        if (usingTempDirectory)
+    path <- resolvePaths(path, subset)
+    task <- ifelse(is.null(output), "read", "convert")
+    
+    if (any(attr(path, "temporary")))
+        on.exit(unlink(path[attr(path,"temporary")], recursive=TRUE))
+    
+    processPath <- function(p)
+    {
+        if (!file.info(p)$isdir)
+            readPath(p, flipY, crop, forceStack, verbosity, labelFormat, TRUE, depth, task, output)
+        else if (interactive && is.null(subset))
         {
-            absolute <- grepl(paste0("^([A-Za-z]:)?",.Platform$file.sep), p)
-            p[!absolute] <- file.path(getwd(), p[!absolute])
-            readFromTempDirectory(file.path(tempdir(),"divest"), p)
-        }
-        else if (!file.exists(p))
-        {
-            warning(paste0("Path \"", p, "\" does not exist"))
-            return (NULL)
-        }
-        else if (!file.info(p)$isdir)
-            .readPath(path.expand(p), flipY, crop, forceStack, verbosity, labelFormat, TRUE, depth, "read")
-        else if (interactive)
-        {
-            p <- path.expand(p)
-            info <- .sortInfoTable(.readPath(p, flipY, crop, forceStack, min(0L,verbosity), labelFormat, FALSE, depth, "scan"))
+            info <- sortInfoTable(readPath(p, flipY, crop, forceStack, min(0L,verbosity), labelFormat, FALSE, depth, "scan"))
             
-            nSeries <- nrow(info)
-            if (nSeries < 1)
-                return (NULL)
-            
-            digits <- floor(log10(nSeries)) + 1
-            seriesNumbers <- sprintf(paste0("%",digits,"d: "), seq_len(nSeries))
-            cat(paste0("\n", seriesNumbers, attr(info,"descriptions")))
-            cat("\n\nType <Enter> for all series, 0 for none, or indices separated by spaces or commas")
-            selection <- .readline("\nSelected series: ")
-            if (selection == "")
+            selection <- .menu(attr(info,"descriptions"))
+            if (identical(selection, seq_len(nrow(info))))
             {
-                allResults <- .readPath(p, flipY, crop, forceStack, verbosity, labelFormat, FALSE, depth, "read")
+                allResults <- readPath(p, flipY, crop, forceStack, verbosity, labelFormat, FALSE, depth, task, output)
                 return (allResults[attr(info,"ordering")])
             }
-            else if (selection == "0")
-                return (list())
             else
             {
-                selection <- as.integer(unlist(strsplit(selection, "[, ]+", perl=TRUE)))
-                selectedResults <- lapply(selection, function(s) {
-                    files <- attr(info,"paths")[[s]]
-                    absolute <- grepl(paste0("^([A-Za-z]:)?",.Platform$file.sep), files)
-                    files[!absolute] <- file.path(getwd(), files[!absolute])
-                    readFromTempDirectory(file.path(tempdir(),paste0("divest",as.character(s))), files)
-                })
-                return (do.call(c,selectedResults))
+                selectedResults <- lapply(resolvePaths(info,selection), readPath, flipY, crop, forceStack, verbosity, labelFormat, FALSE, depth, task, output)
+                return (do.call(c, selectedResults))
             }
         }
         else
-            .readPath(path.expand(p), flipY, crop, forceStack, verbosity, labelFormat, FALSE, depth, "read")
-    })
+            readPath(p, flipY, crop, forceStack, verbosity, labelFormat, FALSE, depth, task, output)
+    }
     
-    return (do.call(c, results))
+    return (do.call(c, lapply(path,processPath)))
 }
+
+# Create and then monkey-patch convertDicom() so that it differs from
+# readDicom() only in the default "output" parameter
 
 #' @rdname readDicom
 #' @export
-sortDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s/%b", depth = 5L, nested = TRUE, keepUnsorted = FALSE)
+convertDicom <- readDicom
+formals(convertDicom)$output <- as.symbol("path")
+
+#' @rdname readDicom
+#' @export
+sortDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s/%b", depth = 5L, nested = NA, keepUnsorted = FALSE, output = path)
 {
-    if (nested)
-        info <- .readPath(path, FALSE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "sort")
-    else
-        info <- .readPath(path, FALSE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "sort", ".")
+    if (isFALSE(nested))
+        output <- "."
+    info <- readPath(path, FALSE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "sort", output)
     
     if (!keepUnsorted && length(info$source) == length(info$target))
     {
@@ -234,10 +267,10 @@ scanDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelForm
 {
     results <- lapply(path, function(p) {
         if (file.info(p)$isdir)
-            .readPath(path.expand(p), TRUE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "scan")
+            readPath(path.expand(p), TRUE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "scan")
         else
             warning(paste0("Path \"", p, "\" does not point to a directory"))
     })
     
-    .sortInfoTable(Reduce(function(x,y) structure(rbind(x,y), descriptions=c(attr(x,"descriptions"),attr(y,"descriptions")), paths=c(attr(x,"paths"),attr(y,"paths"))), results))
+    sortInfoTable(Reduce(function(x,y) structure(rbind(x,y), descriptions=c(attr(x,"descriptions"),attr(y,"descriptions")), paths=c(attr(x,"paths"),attr(y,"paths"))), results))
 }

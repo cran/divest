@@ -9,6 +9,22 @@
 
 using namespace Rcpp;
 
+bool isEmptyString (const char *str)
+{
+    if (strlen(str) == 0)
+        return true;
+    
+    const char *ptr = str;
+    while (*ptr != '\0')
+    {
+        // Strings composed entirely of spaces are considered empty
+        if (*ptr != ' ')
+            return false;
+        ptr++;
+    }
+    return true;
+}
+
 RcppExport SEXP readDirectory (SEXP path_, SEXP flipY_, SEXP crop_, SEXP forceStack_, SEXP verbosity_, SEXP labelFormat_, SEXP singleFile_, SEXP depth_, SEXP task_, SEXP outputDir_)
 {
 BEGIN_RCPP
@@ -16,12 +32,15 @@ BEGIN_RCPP
     const std::string labelFormat = as<std::string>(labelFormat_);
     const std::string task = as<std::string>(task_);
     
+    const bool willConvert = (task == "read" || task == "convert");
+    
     TDCMopts options;
     setDefaultOpts(&options, NULL);
-    options.isGz = false;
-    options.gzLevel = 0;
+    options.isGz = true;
+    options.gzLevel = 6;
     options.isFlipY = as<bool>(flipY_);
-    options.isCreateBIDS = false;
+    options.isCreateBIDS = willConvert;
+    options.isImageInMemory = (task == "read");
     options.isCreateText = false;
     options.isSortDTIbyBVal = false;
     options.isForceStackSameSeries = as<bool>(forceStack_);
@@ -34,7 +53,7 @@ BEGIN_RCPP
     options.compressFlag = kCompressYes;
     strcpy(options.indir, path.c_str());
     strcpy(options.filename, labelFormat.c_str());
-    if (task == "sort" && !Rf_isNull(outputDir_))
+    if (!Rf_isNull(outputDir_))
     {
         const std::string outputDir = as<std::string>(outputDir_);
         strcpy(options.outdir, outputDir.c_str());
@@ -51,34 +70,34 @@ BEGIN_RCPP
         {
             // Construct a data frame containing information about each series
             // A vector of descriptive strings is also built, and attached as an attribute
-            const int n = options.series.size();
+            const size_t n = options.series.size();
             CharacterVector label(n,NA_STRING), seriesDescription(n,NA_STRING), patientName(n,NA_STRING), descriptions(n);
             DateVector studyDate(n);
             NumericVector echoTime(n,NA_REAL), repetitionTime(n,NA_REAL);
             IntegerVector files(n,NA_INTEGER), seriesNumber(n,NA_INTEGER), echoNumber(n,NA_INTEGER);
             LogicalVector phase(n,NA_LOGICAL), diffusion(n,false);
             List paths(n);
-            for (int i = 0; i < n; i++)
+            for (size_t i = 0; i < n; i++)
             {
                 const TDICOMdata &data = options.series[i].representativeData;
                 std::ostringstream description;
                 description << "Series " << data.seriesNum;
                 seriesNumber[i] = data.seriesNum;
-                if (strlen(data.seriesDescription) > 0)
+                if (!isEmptyString(data.seriesDescription))
                 {
                     description << " \"" << data.seriesDescription << "\"";
                     seriesDescription[i] = data.seriesDescription;
                 }
-                else if (strlen(data.sequenceName) > 0)
+                else if (!isEmptyString(data.sequenceName))
                     description << " \"" << data.sequenceName << "\"";
-                else if (strlen(data.protocolName) > 0)
+                else if (!isEmptyString(data.protocolName))
                     description << " \"" << data.protocolName << "\"";
-                if (strlen(data.patientName) > 0)
+                if (!isEmptyString(data.patientName))
                 {
                     description << ", patient \"" << data.patientName << "\"";
                     patientName[i] = data.patientName;
                 }
-                if (strlen(data.studyDate) >= 8 && strcmp(data.studyDate,"00000000") != 0)
+                if (strlen(data.studyDate) >= 8 && strncmp(data.studyDate,"00000000",8) != 0)
                 {
                     description << ", acquired on " << std::string(data.studyDate,4) << "-" << std::string(data.studyDate+4,2) << "-" << std::string(data.studyDate+6,2);
                     studyDate[i] = Date(data.studyDate, "%Y%m%d");
@@ -127,11 +146,13 @@ BEGIN_RCPP
             DataFrame info = DataFrame::create(Named("label")=label, Named("rootPath")=path, Named("files")=files, Named("seriesNumber")=seriesNumber, Named("seriesDescription")=seriesDescription, Named("patientName")=patientName, Named("studyDate")=studyDate, Named("echoTime")=echoTime, Named("repetitionTime")=repetitionTime, Named("echoNumber")=echoNumber, Named("phase")=phase, Named("diffusion")=diffusion, Named("stringsAsFactors")=false);
             info.attr("descriptions") = descriptions;
             info.attr("paths") = paths;
-            info.attr("class") = CharacterVector::create("divest","data.frame");
+            info.attr("class") = CharacterVector::create("divestListing","data.frame");
             return info;
         }
         else if (options.isRenameNotConvert)
             return List::create(Named("source")=options.sourcePaths, Named("target")=options.targetPaths, Named("ignored")=options.ignoredPaths);
+        else if (!options.isImageInMemory)
+            return images.pathVector();
         else
             return images;
     }

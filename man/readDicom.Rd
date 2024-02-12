@@ -2,17 +2,22 @@
 % Please edit documentation in R/read.R
 \name{readDicom}
 \alias{readDicom}
+\alias{convertDicom}
 \alias{sortDicom}
 \alias{scanDicom}
 \title{Read one or more DICOM directories}
 \usage{
 readDicom(path = ".", subset = NULL, flipY = TRUE, crop = FALSE,
   forceStack = FALSE, verbosity = 0L, labelFormat = "T\%t_N\%n_S\%s",
-  depth = 5L, interactive = base::interactive())
+  depth = 5L, interactive = base::interactive(), output = NULL)
+
+convertDicom(path = ".", subset = NULL, flipY = TRUE, crop = FALSE,
+  forceStack = FALSE, verbosity = 0L, labelFormat = "T\%t_N\%n_S\%s",
+  depth = 5L, interactive = base::interactive(), output = path)
 
 sortDicom(path = ".", forceStack = FALSE, verbosity = 0L,
-  labelFormat = "T\%t_N\%n_S\%s/\%b", depth = 5L, nested = TRUE,
-  keepUnsorted = FALSE)
+  labelFormat = "T\%t_N\%n_S\%s/\%b", depth = 5L, nested = NA,
+  keepUnsorted = FALSE, output = path)
 
 scanDicom(path = ".", forceStack = FALSE, verbosity = 0L,
   labelFormat = "T\%t_N\%n_S\%s", depth = 5L)
@@ -60,9 +65,14 @@ files, relative to each \code{path}.}
 requested paths will first be scanned and a list of DICOM series will be
 presented. You may then choose which series to convert.}
 
+\item{output}{The directory to write converted or copied NIfTI files to, or
+\code{NULL}. In the latter case, which isn't valid for \code{sortDicom},
+images are converted in memory and returned as R objects.}
+
 \item{nested}{For \code{sortDicom}, should the sorted files be created
-within the source directory (\code{TRUE}, the default), or in the current
-working directory (\code{FALSE})?}
+within the source directory (\code{TRUE}), or in the current working
+directory (\code{FALSE})? Now soft-deprecated in favour of \code{output},
+which is more flexible.}
 
 \item{keepUnsorted}{For \code{sortDicom}, should the unsorted files be left
 in place, or removed after they are copied into their new locations? The
@@ -70,9 +80,9 @@ default, \code{FALSE}, corresponds to a move rather than a copy. If
 creating new files fails then the old ones will not be deleted.}
 }
 \value{
-The \code{readDicom} function returns a list of \code{niftiImage}
-  objects, which can be easily converted to standard R arrays or written to
-  NIfTI-1 format using functions from the \code{RNifti} package. The
+\code{readDicom} and \code{convertDicom} return a list of
+  \code{niftiImage} objects if \code{output} is \code{NULL}; otherwise a
+  vector of paths to NIfTI-1 files created in the target directory. The
   \code{scanDicom} function returns a data frame containing information
   about each DICOM series found. \code{sortDicom} is mostly called for its
   side-effect, but also (invisibly) returns a list detailing source and
@@ -89,7 +99,9 @@ The \code{scanDicom} function parses directories full of DICOM files and
 returns information about the acquisition series they contain.
 \code{readDicom} reads these files and converts them to (internal) NIfTI
 images (whose pixel data can be extracted using \code{as.array}).
-\code{sortDicom} renames the files, but does not convert them.
+\code{convertDicom} performs the same conversion but writes to NIfTI files
+by default, instead of retaining the images in memory. \code{sortDicom}
+renames the files, but does not convert them.
 
 The \code{labelFormat} argument describes the string format used for image
 labels and sorted files. Valid codes, each escaped with a percentage sign,
