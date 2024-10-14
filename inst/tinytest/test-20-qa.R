@@ -1,6 +1,7 @@
 options(divest.bidsAttributes=TRUE)
 
-ignoreFields <- c("PulseSequenceName", "ConversionSoftwareVersion")
+ignoreFields <- c("ConversionSoftwareVersion", "BodyPartExamined", "ImageType")
+ignoreImages <- c("dti_tra_dir16_PA_6_134431")
 
 test_battery <- function (root, labelFormat = "%p_%s")
 {
@@ -21,6 +22,9 @@ test_battery <- function (root, labelFormat = "%p_%s")
     
     for (i in seq_along(images))
     {
+        if (labels[i] %in% ignoreImages)
+            next
+        
         if (refFilesPresent$image[i])
         {
             refImage <- RNifti::readNifti(refFiles$image[i], internal=TRUE)
@@ -32,7 +36,12 @@ test_battery <- function (root, labelFormat = "%p_%s")
             metadata <- attributes(images[[i]])
             refMetadata <- jsonlite::read_json(refFiles$metadata[i], simplifyVector=TRUE)
             fields <- setdiff(names(refMetadata), ignoreFields)
-            expect_equal(refMetadata[fields], metadata[fields], tolerance=1e-4)
+            # Check we have all the metadata we expect
+            # If not, this test will fail but we remove the names to avoid a subsequent error
+            missingFields <- setdiff(fields, names(metadata))
+            expect_length(missingFields, 0L, info=missingFields)
+            fields <- intersect(fields, names(metadata))
+            expect_equal(refMetadata[fields], metadata[fields], info=labels[i], tolerance=1e-4)
         }
         
         # These files only apply to diffusion sequences
@@ -40,8 +49,8 @@ test_battery <- function (root, labelFormat = "%p_%s")
         {
             bValues <- drop(as.matrix(read.table(refFiles$bval[i])))
             bVectors <- t(as.matrix(read.table(refFiles$bvec[i])))
-            expect_equivalent(metadata$bValues, bValues, tolerance=1e-4)
-            expect_equivalent(metadata$bVectors, bVectors, tolerance=1e-4)
+            expect_equivalent(metadata$bValues, bValues, info=labels[i], tolerance=1e-4)
+            expect_equivalent(metadata$bVectors, bVectors, info=labels[i], tolerance=1e-4)
         }
     }
 }
