@@ -1,6 +1,6 @@
 Package: divest
-Version: 1.1.1
-Date: 2024-10-20
+Version: 1.2.0
+Date: 2025-03-04
 Title: Get Images Out of DICOM Format Quickly
 Authors@R: c(person("Jon", "Clayden", email="code@clayden.org", role=c("aut","cre"), comment=c(ORCID="0000-0002-6608-0619")),
              person("Chris", "Rorden", role="aut"),
@@ -9,7 +9,7 @@ Authors@R: c(person("Jon", "Clayden", email="code@clayden.org", role=c("aut","cr
              person("Pascal", "Gloor", role="cph"))
 Maintainer: Jon Clayden <code@clayden.org>
 Depends: R (>= 3.5.0)
-Imports: Rcpp, RNifti
+Imports: Rcpp, RNifti (>= 1.8.0)
 LinkingTo: Rcpp, RNifti
 Suggests: jsonlite, tinytest, covr
 Description: Provides tools to sort DICOM-format medical image files, and
@@ -20,11 +20,11 @@ BugReports: https://github.com/jonclayden/divest/issues
 Encoding: UTF-8
 RoxygenNote: 7.3.2
 NeedsCompilation: yes
-Packaged: 2024-10-20 20:48:31 UTC; jon
+Packaged: 2025-03-05 18:14:03 UTC; jon
 Author: Jon Clayden [aut, cre] (<https://orcid.org/0000-0002-6608-0619>),
   Chris Rorden [aut],
   Martin J Fiedler [cph],
   Cong Xu [cph],
   Pascal Gloor [cph]
 Repository: CRAN
-Date/Publication: 2024-10-20 22:40:02 UTC
+Date/Publication: 2025-03-05 18:30:02 UTC
