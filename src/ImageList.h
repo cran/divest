@@ -7,26 +7,58 @@
 #include <Rcpp.h>
 
 #include "RNifti.h"
+#include "nii_dicom.h"
+
+struct TDicomSeries {
+    std::string name;
+    TDICOMdata representativeData;
+    std::vector<std::string> files;
+};
 
 class ImageList
 {
 private:
-    // BIDS JSON buffer size limit per image, currently 4 MiB
-    const size_t jsonBufferSize = 0x400000;
+    // BIDS JSON sidecar buffer, allocated by open_memstream() and valid once
+    // dcm2niix has closed the handle
     char *jsonBuffer;
+    size_t jsonSize;
     FILE *jsonHandle_;
     
     std::vector<std::string> paths_;
     
-    Rcpp::List list;
+    // Images are collected in a vector, since Rcpp::List::push_back() copies
+    // the whole list each time; the RObject wrappers protect them from R's GC
+    std::vector<Rcpp::RObject> images_;
     Rcpp::List deferredAttributes;
     
+    void freeJson ()
+    {
+        free(jsonBuffer);
+        jsonBuffer = NULL;
+        jsonSize = 0;
+    }
+    
 public:
-    ImageList () : jsonBuffer(NULL), jsonHandle_(NULL) {}
+    // Results of scanning or sorting a directory, which are kept here rather
+    // than in TDCMopts, since dcm2niix often copies the latter
+    std::vector<TDicomSeries> series;
+    std::vector<std::string> sourcePaths, targetPaths, ignoredPaths;
+    
+    ImageList ()
+        : jsonBuffer(NULL), jsonSize(0), jsonHandle_(NULL) {}
+    
+    ~ImageList ()
+    {
+        freeJson();
+    }
+    
+    // Copying would lead to the buffer being freed twice
+    ImageList (const ImageList &) = delete;
+    ImageList & operator= (const ImageList &) = delete;
     
     operator SEXP ()
     {
-        return list;
+        return Rcpp::List(images_.begin(), images_.end());
     }
     
     Rcpp::CharacterVector pathVector ()
@@ -36,16 +68,30 @@ public:
     
     FILE * jsonHandle ()
     {
-#ifdef HAVE_FMEMOPEN
-        if (jsonHandle_ == NULL)
-        {
-            // If the system supports it, use fmemopen to stream into a string buffer
-            // This is C style, but dcm2niix expects a FILE*
-            jsonBuffer = R_alloc(jsonBufferSize, 1);
-            jsonHandle_ = fmemopen(jsonBuffer, jsonBufferSize, "w");
-        }
+#ifdef HAVE_OPEN_MEMSTREAM
+        // If the system supports it, stream into a buffer that grows as needed
+        // This is C style, but dcm2niix expects a FILE*
+        // Each sidecar gets a fresh buffer: any existing one belongs to a
+        // sidecar that was never attached to an image, and dcm2niix will
+        // already have closed its handle, so it can be released
+        jsonHandle_ = NULL;
+        freeJson();
+        jsonHandle_ = open_memstream(&jsonBuffer, &jsonSize);
 #endif
         return jsonHandle_;
+    }
+
+    // Attach the pending sidecar, if any, to the most recently appended image,
+    // and release its buffer; this is called by append(), and separately for
+    // cases (such as MR spectroscopy) where dcm2niix writes the sidecar
+    // afterwards
+    void attachJson ()
+    {
+        if (!images_.empty() && jsonHandle_ != NULL && jsonBuffer != NULL)
+            images_.back().attr(".bidsJson") = const_cast<const char *>(jsonBuffer);
+        
+        jsonHandle_ = NULL;
+        freeJson();
     }
     
     void append (nifti_image * const image, const std::string &name)
@@ -64,14 +110,8 @@ public:
             deferredAttributes = Rcpp::List();
         }
         
-        if (jsonHandle_ != NULL)
-        {
-            // dcm2niix handles closing the file handle
-            pointer.attr(".bidsJson") = const_cast<const char *>(jsonBuffer);
-            jsonHandle_ = NULL;
-        }
-        
-        list.push_back(pointer);
+        images_.push_back(pointer);
+        attachJson();
     }
     
     template <typename ValueType>

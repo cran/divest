@@ -38,23 +38,20 @@ resolvePaths <- function (path, subset = NULL, dirsOnly = FALSE)
             stop("Cannot symlink or copy files into temporary directory")
     }
     
-    # Path should now only be a character vector
-    for (i in seq_along(path))
+    # Path should now only be a character vector (possibly empty)
+    # Check all elements first, rather than dropping them while iterating
+    path <- as.character(path)
+    valid <- file.exists(path)
+    for (p in path[!valid])
+        warning(paste0("Path \"", p, "\" does not exist"))
+    if (dirsOnly)
     {
-        if (!file.exists(path[i]))
-        {
-            warning(paste0("Path \"", path[i], "\" does not exist"))
-            path <- path[-i]
-        }
-        else if (dirsOnly && !file.info(path[i])$isdir)
-        {
-            warning(paste0("Path \"", path[i], "\" does not point to a directory"))
-            path <- path[-i]
-        }
-        else
-            path[i] <- path.expand(path[i])
+        isDir <- dir.exists(path)
+        for (p in path[valid & !isDir])
+            warning(paste0("Path \"", p, "\" does not point to a directory"))
+        valid <- valid & isDir
     }
-    return (path)
+    return (path.expand(path[valid]))
 }
 
 sortInfoTable <- function (table)
@@ -78,7 +75,12 @@ readPath <- function (path, flipY, crop, forceStack, verbosity, labelFormat, sin
     }
     
     if (is.null(outputDir))
+    {
+        # Any files written here (e.g. JSON sidecars, if they can't be written
+        # to memory) are read before returning, so the directory can go
         outputDir <- tempDirectory()
+        on.exit(unlink(outputDir, recursive=TRUE), add=TRUE)
+    }
     else if (!file.exists(outputDir))
         dir.create(outputDir)
     results <- .Call(C_readDirectory, path, flipY, crop, forceStack, verbosity, labelFormat, singleFile, depth, task, outputDir)
@@ -160,8 +162,11 @@ readPath <- function (path, flipY, crop, forceStack, verbosity, labelFormat, sin
 #'   neck slices from brain images.
 #' @param forceStack If \code{TRUE}, images with the same series number will
 #'   always be stacked together as long as their dimensions are compatible. If
-#'   \code{FALSE}, the default, images will be separated if they differ in
-#'   echo, coil or exposure number, echo time, protocol name or orientation.
+#'   \code{FALSE}, images will be separated if they differ in echo, coil or
+#'   exposure number, echo time, protocol name or orientation. If \code{NA},
+#'   the default, CT and other X-ray images are stacked as for \code{TRUE},
+#'   since their exposure often varies between slices, but others are treated
+#'   as for \code{FALSE}.
 #' @param verbosity Integer value between -2 and 3, controlling the amount of
 #'   output generated during the conversion. A value of -1 will suppress all
 #'   output from \code{dcm2niix} except warnings and errors; -2 also suppresses
@@ -201,7 +206,7 @@ readPath <- function (path, flipY, crop, forceStack, verbosity, labelFormat, sin
 #' readDicom(path, interactive=FALSE)
 #' @author Jon Clayden <code@@clayden.org>
 #' @export readDicom
-readDicom <- function (path = ".", subset = NULL, flipY = TRUE, crop = FALSE, forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", depth = 5L, interactive = base::interactive(), output = NULL)
+readDicom <- function (path = ".", subset = NULL, flipY = TRUE, crop = FALSE, forceStack = NA, verbosity = 0L, labelFormat = "T%t_N%n_S%s", depth = 5L, interactive = base::interactive(), output = NULL)
 {
     if (!is.data.frame(path) && !missing(subset))
         path <- scanDicom(path, forceStack, verbosity, labelFormat)
@@ -220,7 +225,10 @@ readDicom <- function (path = ".", subset = NULL, flipY = TRUE, crop = FALSE, fo
             readPath(p, flipY, crop, forceStack, verbosity, labelFormat, TRUE, depth, task, output)
         else if (interactive && is.null(subset))
         {
-            info <- sortInfoTable(readPath(p, flipY, crop, forceStack, min(0L,verbosity), labelFormat, FALSE, depth, "scan"))
+            info <- readPath(p, flipY, crop, forceStack, min(0L,verbosity), labelFormat, FALSE, depth, "scan")
+            if (is.null(info))
+                return (NULL)
+            info <- sortInfoTable(info)
             
             selection <- .menu(attr(info,"descriptions"))
             if (identical(selection, seq_len(nrow(info))))
@@ -255,7 +263,7 @@ formals(convertDicom)$output <- as.symbol("path")
 
 #' @rdname readDicom
 #' @export
-sortDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s/%b", depth = 5L, nested = NA, keepUnsorted = FALSE, output = path)
+sortDicom <- function (path = ".", forceStack = NA, verbosity = 0L, labelFormat = "T%t_N%n_S%s/%b", depth = 5L, nested = NA, keepUnsorted = FALSE, output = path)
 {
     if (isFALSE(nested))
         output <- "."
@@ -272,14 +280,15 @@ sortDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelForm
 
 #' @rdname readDicom
 #' @export
-scanDicom <- function (path = ".", forceStack = FALSE, verbosity = 0L, labelFormat = "T%t_N%n_S%s", depth = 5L)
+scanDicom <- function (path = ".", forceStack = NA, verbosity = 0L, labelFormat = "T%t_N%n_S%s", depth = 5L)
 {
-    results <- lapply(path, function(p) {
-        if (file.info(p)$isdir)
-            readPath(path.expand(p), TRUE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "scan")
-        else
-            warning(paste0("Path \"", p, "\" does not point to a directory"))
-    })
+    path <- resolvePaths(path, dirsOnly=TRUE)
+    results <- lapply(path, readPath, TRUE, FALSE, forceStack, verbosity, labelFormat, FALSE, depth, "scan")
+    
+    # Drop paths without any DICOM files
+    results <- Filter(Negate(is.null), results)
+    if (length(results) == 0)
+        return (invisible(NULL))
     
     sortInfoTable(Reduce(function(x,y) structure(rbind(x,y), descriptions=c(attr(x,"descriptions"),attr(y,"descriptions")), paths=c(attr(x,"paths"),attr(y,"paths"))), results))
 }

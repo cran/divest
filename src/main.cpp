@@ -5,7 +5,6 @@
 
 #include "ImageList.h"
 #include "nii_dicom_batch.h"
-#include "nii_dicom.h"
 
 using namespace Rcpp;
 
@@ -23,6 +22,15 @@ bool isEmptyString (const char *str)
         ptr++;
     }
     return true;
+}
+
+// Copy a string into one of the fixed-size TDCMopts buffers, which are all of
+// length kOptsStr, or stop if it doesn't fit
+void copyOption (char *target, const std::string &value, const char *description)
+{
+    if (value.length() >= kOptsStr)
+        stop("%s is too long (maximum %d characters)", description, kOptsStr - 1);
+    strcpy(target, value.c_str());
 }
 
 RcppExport SEXP readDirectory (SEXP path_, SEXP flipY_, SEXP crop_, SEXP forceStack_, SEXP verbosity_, SEXP labelFormat_, SEXP singleFile_, SEXP depth_, SEXP task_, SEXP outputDir_)
@@ -43,20 +51,22 @@ BEGIN_RCPP
     options.isImageInMemory = (task == "read");
     options.isCreateText = false;
     options.isSortDTIbyBVal = false;
-    options.isForceStackSameSeries = as<bool>(forceStack_);
+    // NA corresponds to dcm2niix's automatic mode, which stacks CT but not MR
+    const LogicalVector forceStack(forceStack_);
+    options.isForceStackSameSeries = (forceStack[0] == NA_LOGICAL ? 2 : (forceStack[0] ? 1 : 0));
     options.isCrop = as<bool>(crop_);
     options.isOnlySingleFile = as<bool>(singleFile_);
     options.isScanOnly = (task == "scan");
     options.isRenameNotConvert = (task == "sort");
     options.isVerbose = as<int>(verbosity_);
     options.dirSearchDepth = as<int>(depth_);
-    options.compressFlag = kCompressYes;
-    strcpy(options.indir, path.c_str());
-    strcpy(options.filename, labelFormat.c_str());
+    options.compressFlag = kCompressJP2K;
+    copyOption(options.indir, path, "Path");
+    copyOption(options.filename, labelFormat, "Label format");
     if (!Rf_isNull(outputDir_))
     {
         const std::string outputDir = as<std::string>(outputDir_);
-        strcpy(options.outdir, outputDir.c_str());
+        copyOption(options.outdir, outputDir, "Output directory");
     }
     
     ImageList images;
@@ -70,7 +80,7 @@ BEGIN_RCPP
         {
             // Construct a data frame containing information about each series
             // A vector of descriptive strings is also built, and attached as an attribute
-            const size_t n = options.series.size();
+            const size_t n = images.series.size();
             CharacterVector label(n,NA_STRING), seriesDescription(n,NA_STRING), patientName(n,NA_STRING), descriptions(n);
             DateVector studyDate(n);
             NumericVector echoTime(n,NA_REAL), repetitionTime(n,NA_REAL);
@@ -79,7 +89,7 @@ BEGIN_RCPP
             List paths(n);
             for (size_t i = 0; i < n; i++)
             {
-                const TDICOMdata &data = options.series[i].representativeData;
+                const TDICOMdata &data = images.series[i].representativeData;
                 std::ostringstream description;
                 description << "Series " << data.seriesNum;
                 seriesNumber[i] = data.seriesNum;
@@ -124,23 +134,23 @@ BEGIN_RCPP
                     diffusion[i] = true;
                 
                 // The name is stored with leading path components, which we remove here
-                if (options.series[i].name.length() > 0)
+                if (images.series[i].name.length() > 0)
                 {
 #if defined(_WIN32) || defined(_WIN64)
-                    size_t pathSeparator = options.series[i].name.find_last_of("\\/");
+                    size_t pathSeparator = images.series[i].name.find_last_of("\\/");
 #else
-                    size_t pathSeparator = options.series[i].name.find_last_of('/');
+                    size_t pathSeparator = images.series[i].name.find_last_of('/');
 #endif
                     if (pathSeparator == std::string::npos)
-                        label[i] = options.series[i].name;
+                        label[i] = images.series[i].name;
                     else
-                        label[i] = options.series[i].name.substr(pathSeparator+1);
+                        label[i] = images.series[i].name.substr(pathSeparator+1);
                 }
                 
                 phase[i] = data.isHasPhase;
                 descriptions[i] = description.str();
-                files[i] = options.series[i].files.size();
-                paths[i] = wrap(options.series[i].files);
+                files[i] = images.series[i].files.size();
+                paths[i] = wrap(images.series[i].files);
             }
             
             DataFrame info = DataFrame::create(Named("label")=label, Named("rootPath")=path, Named("files")=files, Named("seriesNumber")=seriesNumber, Named("seriesDescription")=seriesDescription, Named("patientName")=patientName, Named("studyDate")=studyDate, Named("echoTime")=echoTime, Named("repetitionTime")=repetitionTime, Named("echoNumber")=echoNumber, Named("phase")=phase, Named("diffusion")=diffusion, Named("stringsAsFactors")=false);
@@ -150,7 +160,7 @@ BEGIN_RCPP
             return info;
         }
         else if (options.isRenameNotConvert)
-            return List::create(Named("source")=options.sourcePaths, Named("target")=options.targetPaths, Named("ignored")=options.ignoredPaths);
+            return List::create(Named("source")=images.sourcePaths, Named("target")=images.targetPaths, Named("ignored")=images.ignoredPaths);
         else if (!options.isImageInMemory)
             return images.pathVector();
         else
@@ -159,7 +169,7 @@ BEGIN_RCPP
     else if (returnValue == kEXIT_NO_VALID_FILES_FOUND)
         Rprintf("No valid DICOM files found\n");
     else
-        Rf_error("DICOM scan failed");
+        stop("DICOM scan failed");
 END_RCPP
 }
 
